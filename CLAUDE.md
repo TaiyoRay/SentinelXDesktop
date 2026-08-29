@@ -121,13 +121,8 @@ Output is counts and integrity checks only — no field values — so it is safe
   (`ui/panes/LedgerGraph.kt`). Note the Compose gotcha it fixed: a `fillMaxSize()` list
   after other content in a `Column` renders off-screen; the transaction list must be
   `weight(1f)`.
-- ✅ **Cash Book** (`ui/panes/CashBookPane.kt`) — the daily cash handover: paired
-  evening/morning day cards, the note-by-note `DenominationCounter`, reconciliation
-  against the stated amount, carry-forward of last night's tally, note inventory,
-  verification workflow, and CSV + printable-HTML export (`core/format/CashBookExport.kt`).
-  Added `cashBook` to `MasterBackup` and took the archive to **v7**. Every movement on a
-  day is a full tile of its own — the evening and morning slots lead the card and still
-  prompt when empty, but a third or fourth entry is no longer demoted to a sub-row.
+- ➡️ **Cash Book — moved out** to the standalone finance app (see “Cash Book & Bank
+  Book — moved out” below). `MasterBackup.cashBook` and the archive v7 bump stay.
 - ✅ **Merge import and scoped transfers** (`core/format/VaultMerge.kt`,
   `ui/components/TransferDialogs.kt`) — import offers Merge or Replace, and on a clash
   offers do-not-copy / replace / keep-both, with per-section counts shown *before* the
@@ -164,66 +159,40 @@ Output is counts and integrity checks only — no field values — so it is safe
   persisted in the `bridge` sidecar) and installs the native-messaging host + per-browser
   manifests (`BridgeInstaller`). See the dedicated section below.
 - ✅ **Cross-platform installers via CI** — Windows/Linux/macOS. See "Releasing" below.
-- ✅ **Bank Book** (`ui/panes/BankPane.kt`, `ui/panes/StatementImportWizard.kt`,
-  `core/statement/`) — bank-statement import and analysis. The wizard reads
-  **CSV/TSV, XLSX, real BIFF8 `.xls`, the fake-HTML `.xls` several banks serve,
-  ODS, and PDF — including password-protected PDFs** (standard security
-  handler: RC4-40/128, AES-128, AES-256 all implemented in
-  `core/statement/PdfDocument.kt`). Flow: FILE → COLUMNS (auto-mapped,
-  overridable) → FIELDS (per-field extraction toggles over the narration) →
-  REVIEW (checkbox per row, duplicates pre-unticked, balance mismatches
-  flagged) → one-mutation commit. `MasterBackup` gained `bankTxns`
-  (**archive version unchanged** — additive, like notes-v8), `VaultSection.BANK`,
-  and `VaultMerge` merges on `(book, fingerprint)`. See the dedicated section
-  below before touching any of it.
+- ➡️ **Bank Book — moved out** likewise. `MasterBackup.bankTxns`, `VaultSection.BANK`
+  and the `(book, fingerprint)` merge identity stay.
 
-159 tests passing.
+132 tests passing.
 
-## Bank Book — read before touching `core/statement`
+## Cash Book & Bank Book — moved out
 
-- **`core/statement/` is a MIRRORED PACKAGE** — byte-identical to the Android
-  app's `statement/` package apart from package lines, exactly like
-  `VaultMerge.kt` and `BridgeMatcher.kt`. The same statement file must produce
-  the same fingerprints on both apps or cross-device re-imports duplicate
-  instead of deduplicating. `diff -r` of the two directories is the check.
-- **Zero dependencies, on purpose.** Every reader (zip/XML, OLE2/BIFF, PDF
-  incl. decryption) is hand-rolled over `java.base` + `javax.crypto` so the
-  package can exist on the phone without adding a single manifest entry or
-  transitive network pull. Do not "simplify" by adding POI or PDFBox.
-- **Dispatch is by content, never extension** (`StatementReader`): banks serve
-  HTML and CSV with `.xls` names. Magic bytes decide the reader.
-- **Bank presets + auto-detection** (`StatementParse.BANK_PRESETS`, `detectBank`):
-  the issuer is detected from the FILENAME first (banks name exports
-  distinctively — a letterhead can be a logo image the readers never see), then
-  from preamble text ABOVE the header row only — scanning transaction rows once
-  misdetected an Axis statement as "YES Bank" via a narration. A preset carries
-  per-bank header meanings (Axis's bare `DR/CR/BAL/SOL`); the wizard shows the
-  detection and lets the user override. Verified against real Axis `.xls`
-  (BIFF8, 645 rows, 644/644 balance checks) and IDFC `.xlsx` exports.
-- **`./gradlew verifyStatement --args="/path/statement.xls"`** probes a real
-  file through the engine — format, detected bank, mapping, parse outcome,
-  balance verification — without importing anything. Use it before blaming the
-  engine and after changing it.
-- Content inference must never crown a near-constant numeric column as the
-  BALANCE (the Axis SOL branch-code failure) — integer constants are codes,
-  decimal constants can still be money. Tests pin this.
-- **`narration` is authoritative; the extracted fields are commentary.** Same
-  contract as cash-book `amount`/`denominations`: mode/party/reference/remark/
-  bank are wizard-chosen labels over the untouched original line.
-- **`fingerprint` is the dedup identity** (`StatementParse.fingerprintOf`:
-  date + amount + direction + reference + normalised narration + balance, with
-  deterministic `#n` suffixes for intra-statement twins). The **book stays
-  outside the hash** so renaming a book rewrites one field and invalidates
-  nothing; merge identity is the pair `(book, fingerprint)`. The phone declares
-  it as a unique REPLACE index — a merge emitting two rows with the same pair
-  would silently eat one.
-- **Statement import commits as ONE `mutate`** (`AppState.importBankTxns`) —
-  one save, one undo snapshot, dedup against `(book, fingerprint)` inside.
-- The Bank Book deliberately does **not** feed Wealth Vision or the Ledger —
-  same reasoning as the Cash Book: transfers between own accounts would
-  corrupt income/expense analytics. It is its own section with its own totals.
-- The imported statement file itself stays on disk, plaintext — the DONE step
-  says so and suggests deleting it. The importer never writes plaintext out.
+Both books now live in a standalone finance app (name pending — `HANDOFF_APP_NAME` in
+`core/format/Handoff.kt` is the one place it appears; rename it there). Gone from this
+repo: the `CashBookPane` / `CashEntryEditor` / `BankPane` / `StatementImportWizard`
+panes, `DenominationCounter`, `CashBookExport` (+ dialog), `SlipViewerDialog`, the whole
+`core/statement/` engine with its `verifyStatement` probe task, and their tests. The
+**mirrored-package rule for `core/statement/` no longer applies here** — the engine's one
+home is the new app.
+
+Kept, deliberately: `CashEntryEntity` / `BankTxnEntity` and their helpers in
+`core/format/MasterBackup.kt`, `MasterBackup.cashBook` / `bankTxns`,
+`VaultSection.CASHBOOK` / `BANK`, the `countIn` / `scopedTo` / `referencedImages` arms,
+and both `VaultMerge` arms (cash: content tuple, `unique = false`; bank:
+`(book, fingerprint)`) — `VaultMerge.kt` is still byte-identical to the phone's copy, and
+`CashBookTest` / `BankBookFormatTest` / the `VaultMergeTest` pins still run. Every
+archive round-trips as before and nothing here deletes a record.
+
+**The hand-off:** while the vault holds any cash entry or bank transaction, the Overview
+shows a "CASH & BANK BOOKS — moved to …" card (`AppShell.CashBankHandoffCard`) with the
+counts and one button that opens `VaultExportDialog` over the explicit section list
+`CashBankHandoff.SECTIONS` — an ordinary scoped Migration Seal named
+`Sentinel_CashBank_*.sxv`, slip photos included through `referencedImages()`. The card
+disappears once both lists are empty.
+
+The fingerprint contract (SHA-256 of date + amount + direction + reference + normalised
+narration + balance, `#n` twin suffixes, book outside the hash) now lives in the new app.
+Anything that re-imports bank rows into this vault must keep producing the same hash, or
+cross-device re-imports duplicate instead of deduplicating.
 
 ## Bills, OTP logins, RC cards, manual bank entries (post-1.6.0)
 
@@ -252,11 +221,7 @@ Output is counts and integrity checks only — no field values — so it is safe
   type chips, gender/blood-group chips, dd/MM/yyyy hints, and **suggestion chips**
   (DOB, names, father's name, bank names) harvested from the vault's own artifacts;
   the phone offers the same KNOWN DOB chips. Don't regress it to six flat fields.
-- **Manual bank entries** (`BankTxnCreate` here, `BankTxnCreateDialog` on the phone):
-  the typed description becomes the narration, and the fingerprint comes from the SAME
-  `StatementParse.fingerprintOf` an import uses, so manual rows dedupe and merge like
-  imported ones. A later statement covering the same day arrives as its own row
-  (different narration) — the editors say so.
+- **Manual bank entries** moved out with the Bank Book (see the section above).
 
 ## Browser bridge — trust model mirrors the phone
 
@@ -381,7 +346,7 @@ Pushing needs the user's GitHub PAT (`repo` scope; add `workflow` scope if the p
   so the card grew to whatever height it was *offered*. Inside a `LazyColumn` item the
   offered height is effectively infinite and collapses back to the content, which is why
   every caller looked fine for months. The first time one was placed in a plain `Column`
-  (the Cash Book's pinned note inventory) it swallowed the pane and pushed the search box
+  (a pinned inventory card in a pane since moved out) it swallowed the pane and pushed the search box
   and the entire day list off the bottom. The stripe is now wrapped in
   `Box(Modifier.matchParentSize())`, which is measured after the content and does not feed
   into the parent's size. Same family as the `weight(1f)` rule below: **any
@@ -472,8 +437,8 @@ Pushing needs the user's GitHub PAT (`repo` scope; add `workflow` scope if the p
 - **`entryDate` is UTC midnight, not local midnight.** A cash book's date is a calendar
   day, not an instant. Use `businessDateOf()`; formatting it in the local zone shows the
   previous day west of Greenwich.
-- **The cash book exports are plaintext**, like the ledger CSV and for the same reason.
-  Both dialogs warn every time. Do not remove the warning, and do not extend plaintext
+- **The ledger CSV is the one plaintext export left** (the cash book's went with it).
+  The dialog warns every time. Do not remove the warning, and do not extend plaintext
   export to logins or card secrets.
 
 Full plan: `~/.claude/plans/typed-pondering-aho.md`

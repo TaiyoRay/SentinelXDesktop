@@ -32,15 +32,16 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nikhil.sentinelx.desktop.core.format.CashBankHandoff
+import com.nikhil.sentinelx.desktop.core.format.HANDOFF_APP_NAME
 import com.nikhil.sentinelx.desktop.core.format.SxvArchive
+import com.nikhil.sentinelx.desktop.core.format.slipFilenames
 import com.nikhil.sentinelx.desktop.core.format.folderKey
 import com.nikhil.sentinelx.desktop.core.audit.ExpiryScan
 import com.nikhil.sentinelx.desktop.core.audit.PasswordAudit
 import com.nikhil.sentinelx.desktop.ui.components.*
-import com.nikhil.sentinelx.desktop.ui.panes.BankPane
 import com.nikhil.sentinelx.desktop.ui.panes.BillsPane
 import com.nikhil.sentinelx.desktop.ui.panes.CardsPane
-import com.nikhil.sentinelx.desktop.ui.panes.CashBookPane
 import com.nikhil.sentinelx.desktop.ui.panes.ChroniclesPane
 import com.nikhil.sentinelx.desktop.ui.panes.LedgerPane
 import com.nikhil.sentinelx.desktop.ui.panes.NotesPane
@@ -97,8 +98,6 @@ fun AppShell(state: AppState) {
                     Section.NOTES -> NotesPane(state)
                     Section.CHRONICLES -> ChroniclesPane(state)
                     Section.LEDGER -> LedgerPane(state)
-                    Section.CASHBOOK -> CashBookPane(state)
-                    Section.BANK -> BankPane(state)
                     Section.BILLS -> BillsPane(state)
                 }
                 }
@@ -205,11 +204,6 @@ private fun Section.countIn(state: AppState): Int? = when (this) {
     Section.NOTES -> state.backup.prophecies.size
     Section.CHRONICLES -> state.backup.chronicles.size
     Section.LEDGER -> state.backup.ledger.size
-    // Record count, like every other section. The count of entries still awaiting
-    // verification is the more actionable number, but a bare digit in the sidebar
-    // can't say which of the two it is — that one gets a labelled chip in the pane.
-    Section.CASHBOOK -> state.backup.cashBook.size
-    Section.BANK -> state.backup.bankTxns.size
     Section.BILLS -> state.backup.bills.size
 }
 
@@ -313,9 +307,7 @@ private fun OverviewPane(state: AppState) {
             Triple("Notes", b.prophecies.size, PurpleMystic),
             Triple("Chronicles", b.chronicles.size, GoldBright),
             Triple("Accounts", b.accounts.size, IncomeGreen),
-            Triple("Ledger rows", b.ledger.size, AmberWarn),
-            Triple("Cash entries", b.cashBook.size, GoldIce),
-            Triple("Bank txns", b.bankTxns.size, CyanGlow)
+            Triple("Ledger rows", b.ledger.size, AmberWarn)
         )
         tiles.chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
@@ -413,6 +405,9 @@ private fun OverviewPane(state: AppState) {
         // ── Browser bridge ───────────────────────────────────────────────────
         Spacer(Modifier.height(14.dp))
         BrowserBridgeCard(state)
+
+        // ── Cash & Bank hand-off — only while there is something to move ────
+        CashBankHandoffCard(state)
 
         if (b.logins.isEmpty() && b.artifacts.isEmpty() && b.prophecies.isEmpty()) {
             Spacer(Modifier.height(20.dp))
@@ -565,6 +560,68 @@ private fun BrowserBridgeCard(state: AppState) {
                 }
             }
         }
+    }
+}
+
+/**
+ * The Cash Book and Bank Book moved to [HANDOFF_APP_NAME]. Their records are still in
+ * this vault — the wire fields stay so every archive round-trips, and nothing here
+ * deletes them — but the panes are gone, so this card is the one door out: a
+ * password-sealed archive of exactly those two sections for the other app to import.
+ * Renders nothing once there is nothing left to carry over.
+ */
+@Composable
+private fun CashBankHandoffCard(state: AppState) {
+    val b = state.backup
+    val cash = b.cashBook.size
+    val bank = b.bankTxns.size
+    if (cash == 0 && bank == 0) return
+    val slips = remember(b.cashBook) { b.cashBook.sumOf { it.slipFilenames().size } }
+    var exporting by remember { mutableStateOf(false) }
+
+    Spacer(Modifier.height(14.dp))
+    GemCard(accent = GoldIce, modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "CASH & BANK BOOKS",
+                color = GoldIce, fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.weight(1f))
+            Pill("MOVED TO ${HANDOFF_APP_NAME.uppercase()}", GoldIce)
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            listOf(
+                "$cash cash " + (if (cash == 1) "entry" else "entries"),
+                "$bank bank " + (if (bank == 1) "transaction" else "transactions"),
+                if (slips > 0) "$slips slip " + (if (slips == 1) "photo" else "photos") else ""
+            ).filter { it.isNotBlank() }.joinToString(" · "),
+            color = TextParchment, fontSize = 13.sp, fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "The daily cash handover and the bank statements live in $HANDOFF_APP_NAME now. " +
+                "Export them here as a password-sealed archive of just these two books, then " +
+                "import that file there. Nothing is deleted on this side — the records stay in " +
+                "this vault and in every full Migration Seal.",
+            color = TextSubtle, fontSize = 12.sp, lineHeight = 17.sp
+        )
+        Spacer(Modifier.height(14.dp))
+        SmallActionButton("Export cash & bank books", GoldIce) { exporting = true }
+    }
+
+    if (exporting) {
+        VaultExportDialog(
+            state = state,
+            sections = CashBankHandoff.SECTIONS,
+            title = "EXPORT CASH & BANK BOOKS",
+            intro = "Only the cash book and bank book go into this file, along with the slip " +
+                "photos they reference — nothing else in the vault is read. The password " +
+                "cannot be recovered.",
+            doneHint = "In $HANDOFF_APP_NAME: Import, choose this file, and enter the same password.",
+            fileStem = CashBankHandoff.FILE_STEM,
+            onClose = { exporting = false }
+        )
     }
 }
 

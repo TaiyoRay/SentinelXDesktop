@@ -325,14 +325,47 @@ private fun RowScope.Tally(count: Int, label: String, tint: Color) {
  * and there is no way to detect that until you need it.
  */
 @Composable
-fun VaultExportDialog(state: AppState, scope: Section? = null, onClose: () -> Unit) {
+fun VaultExportDialog(state: AppState, scope: Section? = null, onClose: () -> Unit) = VaultExportDialog(
+    state = state,
+    sections = scope?.wire?.let { listOf(it) } ?: VaultSection.ALL,
+    title = if (scope != null) "EXPORT ${scope.label.uppercase()}" else "EXPORT MIGRATION SEAL",
+    intro = if (scope == null)
+        "This archive can be restored on the Android app. Store the password " +
+            "somewhere safe — it cannot be recovered."
+    else
+        "Only ${scope.label.lowercase()} go into this file, along with any " +
+            "images they reference. The password cannot be recovered.",
+    doneHint = if (scope == null)
+        "On the phone: Vault → Migration Restore, and enter this password."
+    else
+        "On the phone: open ${scope.label}, then Import, and enter this " +
+            "password. Choose Merge there unless you mean to discard what " +
+            "the phone already holds.",
+    fileStem = scope?.wire?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Migration",
+    onClose = onClose
+)
+
+/**
+ * The same dialog over an explicit section list — the cash & bank hand-off on the
+ * Overview uses it, since that export spans two sections and no single [Section].
+ * [fileStem] names the file after what it holds (see [defaultArchiveName]).
+ */
+@Composable
+fun VaultExportDialog(
+    state: AppState,
+    sections: List<String>,
+    title: String,
+    intro: String,
+    doneHint: String,
+    fileStem: String,
+    onClose: () -> Unit
+) {
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var done by remember { mutableStateOf<String?>(null) }
     val coroutines = rememberCoroutineScope()
 
-    val sections = scope?.wire?.let { listOf(it) } ?: VaultSection.ALL
     val tooShort = password.isNotEmpty() && password.length < 8
     val mismatch = confirm.isNotEmpty() && password != confirm
     val ready = password.length >= 8 && password == confirm
@@ -343,11 +376,7 @@ fun VaultExportDialog(state: AppState, scope: Section? = null, onClose: () -> Un
         shape = RoundedCornerShape(20.dp),
         title = {
             Text(
-                when {
-                    done != null -> "SEAL CREATED"
-                    scope != null -> "EXPORT ${scope.label.uppercase()}"
-                    else -> "EXPORT MIGRATION SEAL"
-                },
+                if (done != null) "SEAL CREATED" else title,
                 color = GoldTarnished, fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp, fontSize = 14.sp
             )
@@ -359,25 +388,9 @@ fun VaultExportDialog(state: AppState, scope: Section? = null, onClose: () -> Un
                     Spacer(Modifier.height(6.dp))
                     Text(done!!, color = GoldIce, fontSize = 12.sp)
                     Spacer(Modifier.height(14.dp))
-                    Text(
-                        if (scope == null)
-                            "On the phone: Vault → Migration Restore, and enter this password."
-                        else
-                            "On the phone: open ${scope.label}, then Import, and enter this " +
-                                "password. Choose Merge there unless you mean to discard what " +
-                                "the phone already holds.",
-                        color = TextSubtle, fontSize = 11.sp, lineHeight = 17.sp
-                    )
+                    Text(doneHint, color = TextSubtle, fontSize = 11.sp, lineHeight = 17.sp)
                 } else {
-                    Text(
-                        if (scope == null)
-                            "This archive can be restored on the Android app. Store the password " +
-                                "somewhere safe — it cannot be recovered."
-                        else
-                            "Only ${scope.label.lowercase()} go into this file, along with any " +
-                                "images they reference. The password cannot be recovered.",
-                        color = TextSubtle, fontSize = 12.sp, lineHeight = 17.sp
-                    )
+                    Text(intro, color = TextSubtle, fontSize = 12.sp, lineHeight = 17.sp)
                     Spacer(Modifier.height(14.dp))
                     sections.forEach { CountRow(VaultSection.label(it), state.backup.countIn(it)) }
                     Spacer(Modifier.height(12.dp))
@@ -416,7 +429,7 @@ fun VaultExportDialog(state: AppState, scope: Section? = null, onClose: () -> Un
                 }
             } else {
                 TextButton(enabled = ready, onClick = {
-                    val target = chooseSaveLocation(defaultArchiveName(scope)) ?: return@TextButton
+                    val target = chooseSaveLocation(defaultArchiveName(fileStem)) ?: return@TextButton
                     coroutines.launch {
                         message = null
                         val ok = withContext(Dispatchers.Default) {
@@ -448,10 +461,8 @@ fun VaultExportDialog(state: AppState, scope: Section? = null, onClose: () -> Un
  * whole-vault backup, so the filename is the last line of defence against restoring one
  * on an old install and wiping everything else.
  */
-private fun defaultArchiveName(scope: Section?): String {
-    val what = scope?.wire?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Migration"
-    return "Sentinel_${what}_${System.currentTimeMillis()}.sxv"
-}
+private fun defaultArchiveName(fileStem: String): String =
+    "Sentinel_${fileStem}_${System.currentTimeMillis()}.sxv"
 
 // ── Pane entry point ──────────────────────────────────────────────────────────
 

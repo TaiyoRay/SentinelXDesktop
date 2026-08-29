@@ -22,9 +22,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import com.nikhil.sentinelx.desktop.core.format.AccountEntity
 import com.nikhil.sentinelx.desktop.core.format.ArtifactEntity
-import com.nikhil.sentinelx.desktop.core.format.BankTxnEntity
-import com.nikhil.sentinelx.desktop.core.format.CashBook
-import com.nikhil.sentinelx.desktop.core.format.CashEntryEntity
 import com.nikhil.sentinelx.desktop.core.format.ChronicleEntity
 import com.nikhil.sentinelx.desktop.core.format.LoginEntity
 import com.nikhil.sentinelx.desktop.core.format.ProphecyEntity
@@ -33,14 +30,10 @@ import com.nikhil.sentinelx.desktop.ui.components.LocalPanelScope
 import com.nikhil.sentinelx.desktop.ui.components.PanelScope
 import com.nikhil.sentinelx.desktop.ui.panes.AccountEditor
 import com.nikhil.sentinelx.desktop.ui.panes.ArtifactEditor
-import com.nikhil.sentinelx.desktop.ui.panes.BankTxnCreate
 import com.nikhil.sentinelx.desktop.ui.panes.BillEditor
-import com.nikhil.sentinelx.desktop.ui.panes.BankTxnEditor
-import com.nikhil.sentinelx.desktop.ui.panes.CashEntryEditor
 import com.nikhil.sentinelx.desktop.ui.panes.ChronicleEditor
 import com.nikhil.sentinelx.desktop.ui.panes.LoginEditor
 import com.nikhil.sentinelx.desktop.ui.panes.NoteEditor
-import com.nikhil.sentinelx.desktop.ui.panes.StatementImportWizard
 import com.nikhil.sentinelx.desktop.ui.panes.TransactionEditor
 import kotlin.math.roundToInt
 
@@ -99,37 +92,9 @@ sealed interface PanelRequest {
         override val identity get() = existing?.let { "tx:${it.id}" }
     }
 
-    data class CashEntry(
-        val existing: CashEntryEntity?,
-        val date: Long,
-        val slot: String = CashBook.SLOT_OTHER,
-        val seedDenominations: Map<Int, Int> = emptyMap()
-    ) : PanelRequest {
-        override val identity get() = existing?.let { "cash:${it.id}" }
-    }
-
-    data class BankTxn(val existing: BankTxnEntity) : PanelRequest {
-        override val identity get() = "bank:${existing.id}"
-    }
-
-    /**
-     * The statement import wizard. A constant identity on purpose: there is
-     * exactly one import in flight at a time, and clicking IMPORT again raises
-     * the wizard mid-flow instead of opening a second one that would race the
-     * first over the same book.
-     */
     /** Add / edit a bill. Null = new. */
     data class Bill(val existing: com.nikhil.sentinelx.desktop.core.format.BillEntity?) : PanelRequest {
         override val identity get() = existing?.let { "bill:${it.id}" } ?: "bill:new"
-    }
-
-    /** A hand-typed bank entry. One at a time — the identity is constant. */
-    data class BankTxnNew(val defaultBook: String?) : PanelRequest {
-        override val identity get() = "bank:new"
-    }
-
-    data class StatementImport(val defaultBook: String?) : PanelRequest {
-        override val identity get() = "statement-import"
     }
 }
 
@@ -312,27 +277,8 @@ private fun PanelContent(state: AppState, panel: Panel, onClose: () -> Unit) {
         is PanelRequest.Transaction ->
             TransactionEditor(state, request.existing, request.defaultAccountId, onClose)
 
-        is PanelRequest.CashEntry ->
-            CashEntryEditor(
-                state = state,
-                existing = request.existing,
-                defaultDate = request.date,
-                defaultSlot = request.slot,
-                seedDenominations = request.seedDenominations,
-                onClose = onClose
-            )
-
-        is PanelRequest.BankTxn ->
-            BankTxnEditor(state, request.existing, onClose)
-
-        is PanelRequest.BankTxnNew ->
-            BankTxnCreate(state, request.defaultBook, onClose)
-
         is PanelRequest.Bill ->
             BillEditor(state, request.existing, onClose)
-
-        is PanelRequest.StatementImport ->
-            StatementImportWizard(state, request.defaultBook, onClose)
     }
 }
 
@@ -341,7 +287,7 @@ private fun PanelContent(state: AppState, panel: Panel, onClose: () -> Unit) {
  *
  * Centring on a *nominal* width rather than the panel's own is the point. Editors are
  * 560 to 720 wide, and centring each on its own width moved a wide panel left by more
- * than the cascade moved it right — so the cash entry form landed exactly on top of the
+ * than the cascade moved it right — so a wide editor landed exactly on top of the
  * login form and swallowed it whole. Anchoring every panel to the same left edge means
  * the step is the only thing that moves them.
  */

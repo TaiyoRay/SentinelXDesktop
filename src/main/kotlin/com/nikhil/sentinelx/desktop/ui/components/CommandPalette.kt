@@ -27,11 +27,8 @@ import com.nikhil.sentinelx.desktop.core.format.Bills
 import com.nikhil.sentinelx.desktop.core.format.businessDateOf
 import com.nikhil.sentinelx.desktop.core.format.isPaid
 import com.nikhil.sentinelx.desktop.core.format.displayGlyph
-import com.nikhil.sentinelx.desktop.core.format.displayParty
 import com.nikhil.sentinelx.desktop.core.format.folderKey
 import com.nikhil.sentinelx.desktop.core.format.folderName
-import com.nikhil.sentinelx.desktop.core.format.isCredit
-import com.nikhil.sentinelx.desktop.core.format.isIn
 import com.nikhil.sentinelx.desktop.ui.Section
 import com.nikhil.sentinelx.desktop.ui.components.requestWhenReady
 import com.nikhil.sentinelx.desktop.ui.theme.*
@@ -107,39 +104,6 @@ fun buildIndex(backup: MasterBackup, sealedFolders: Set<String> = emptySet()): L
     }
     backup.ledger.forEach {
         add(PaletteEntry(it.title.ifBlank { "Untitled" }, "${it.category} · ${if (it.isIncoming) "+" else "−"}${it.amount}", Section.LEDGER, "ᚢ", if (it.isIncoming) IncomeGreen else ExpenseRed))
-    }
-    backup.cashBook.forEach {
-        // Titled by date, because that is how anyone looks for a handover — "what
-        // happened on the 14th", never "find the ₹56,000 one".
-        val date = businessDateOf(it.entryDate).format(paletteDate)
-        add(
-            PaletteEntry(
-                title = date,
-                subtitle = listOf(
-                    it.slot,
-                    (if (it.isIn()) "+" else "−") + it.amount,
-                    it.particulars.ifBlank { it.verifiedBy }
-                ).filter { part -> part.isNotBlank() }.joinToString(" · "),
-                section = Section.CASHBOOK,
-                glyph = "ᛃ",
-                accent = if (it.isIn()) IncomeGreen else ExpenseRed
-            )
-        )
-    }
-    backup.bankTxns.forEach {
-        add(
-            PaletteEntry(
-                title = it.displayParty(),
-                subtitle = listOf(
-                    it.book,
-                    (if (it.isCredit()) "+" else "−") + it.amount,
-                    it.narration.replace('\n', ' ').take(48)
-                ).filter { part -> part.isNotBlank() }.joinToString(" · "),
-                section = Section.BANK,
-                glyph = "ᛒ",
-                accent = if (it.isCredit()) IncomeGreen else ExpenseRed
-            )
-        )
     }
     backup.bills.forEach {
         add(

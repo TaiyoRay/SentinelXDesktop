@@ -6,10 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.nikhil.sentinelx.desktop.core.format.AccountEntity
 import com.nikhil.sentinelx.desktop.core.format.ArtifactEntity
-import com.nikhil.sentinelx.desktop.core.format.BankTxnEntity
 import com.nikhil.sentinelx.desktop.core.format.BillEntity
 import com.nikhil.sentinelx.desktop.core.format.Bills
-import com.nikhil.sentinelx.desktop.core.format.CashEntryEntity
 import com.nikhil.sentinelx.desktop.core.format.CheckItem
 import com.nikhil.sentinelx.desktop.core.format.ChronicleEntity
 import com.nikhil.sentinelx.desktop.core.format.FolderEntity
@@ -48,8 +46,6 @@ enum class Section(val label: String, val glyph: String, val wire: String?) {
     NOTES("Notes", "ᚱ", VaultSection.NOTES),
     CHRONICLES("Chronicles", "ᛀ", VaultSection.CHRONICLES),
     LEDGER("Ledger", "ᚢ", VaultSection.LEDGER),
-    CASHBOOK("Cash Book", "ᛃ", VaultSection.CASHBOOK),
-    BANK("Bank Book", "ᛒ", VaultSection.BANK),
     BILLS("Bills", "ᛚ", VaultSection.BILLS)
 }
 
@@ -148,7 +144,6 @@ class AppState(private val store: VaultStore = VaultStore(VaultStore.defaultDir(
         session = store.unlock(password).also { backup = it.load() }
         loadFavourites()
         loadBridgePreference()
-        loadBankViewPreference()
         locked = false
         bridge.onUnlocked()
         true
@@ -476,24 +471,6 @@ class AppState(private val store: VaultStore = VaultStore(VaultStore.defaultDir(
 
     fun deleteTransaction(id: Long) = mutate { b -> b.copy(ledger = b.ledger.filterNot { it.id == id }) }
 
-    fun upsertCashEntry(entry: CashEntryEntity) = mutate { b ->
-        val id = if (entry.id == 0L) nextLongId(b.cashBook) { it.id } else entry.id
-        val row = entry.copy(id = id, timestamp = System.currentTimeMillis())
-        b.copy(cashBook = b.cashBook.replacingOrAdding(row) { it.id == id })
-    }
-
-    fun deleteCashEntry(id: Long) = mutate { b -> b.copy(cashBook = b.cashBook.filterNot { it.id == id }) }
-
-    // ── Bank book ─────────────────────────────────────────────────────────────
-
-    fun upsertBankTxn(txn: BankTxnEntity) = mutate { b ->
-        val id = if (txn.id == 0L) nextLongId(b.bankTxns) { it.id } else txn.id
-        val entry = txn.copy(id = id, timestamp = txn.timestamp.orNow())
-        b.copy(bankTxns = b.bankTxns.replacingOrAdding(entry) { it.id == id })
-    }
-
-    fun deleteBankTxn(id: Long) = mutate { b -> b.copy(bankTxns = b.bankTxns.filterNot { it.id == id }) }
-
     fun upsertBill(bill: BillEntity) = mutate { b ->
         val id = if (bill.id == 0L) nextLongId(b.bills) { it.id } else bill.id
         val entry = bill.copy(id = id, timestamp = bill.timestamp.orNow())
@@ -512,104 +489,6 @@ class AppState(private val store: VaultStore = VaultStore(VaultStore.defaultDir(
             )
         })
     }
-
-    /** Bulk delete as ONE mutation — one save, one undo snapshot. */
-    fun deleteBankTxns(ids: Collection<Long>) {
-        if (ids.isEmpty()) return
-        val doomed = ids.toSet()
-        mutate { b -> b.copy(bankTxns = b.bankTxns.filterNot { it.id in doomed }) }
-    }
-
-    /** Deletes a whole statement book and every transaction in it. */
-    fun deleteBankBook(book: String) = mutate { b ->
-        b.copy(bankTxns = b.bankTxns.filterNot { it.book.equals(book, ignoreCase = true) })
-    }
-
-    /**
-     * Renames a book across its member rows. Fingerprints deliberately exclude
-     * the book name (merge identity is the *pair*), so this rewrites one field
-     * and invalidates nothing.
-     */
-    fun renameBankBook(oldName: String, newName: String) {
-        val trimmed = newName.trim()
-        if (trimmed.isEmpty() || trimmed.equals(oldName, ignoreCase = true)) return
-        mutate { b ->
-            b.copy(bankTxns = b.bankTxns.map {
-                if (it.book.equals(oldName, ignoreCase = true)) it.copy(book = trimmed) else it
-            })
-        }
-    }
-
-    // ── Bank row display preference ───────────────────────────────────────
-    // What the transaction row leads with (big text) and what it highlights
-    // beneath. A sidecar preference like favourites — display taste, not vault
-    // data, so it never enters MasterBackup.
-
-    var bankRowPrimary by mutableStateOf("PAYEE")
-        private set
-    var bankRowSecondary by mutableStateOf("REMARK")
-        private set
-
-    fun setBankRowStyle(primary: String, secondary: String) {
-        bankRowPrimary = primary
-        bankRowSecondary = secondary
-        runCatching {
-            session?.writeSidecar("bankview", "$primary|$secondary".toByteArray(Charsets.UTF_8))
-        }
-    }
-
-    internal fun loadBankViewPreference() {
-        runCatching {
-            session?.readSidecar("bankview")?.toString(Charsets.UTF_8)?.split('|')
-        }.getOrNull()?.let { parts ->
-            if (parts.size == 2 && parts.all { it.isNotBlank() }) {
-                bankRowPrimary = parts[0]
-                bankRowSecondary = parts[1]
-            }
-        }
-    }
-
-    /**
-     * Commits one parsed statement as ONE mutation — one save, one undo
-     * snapshot — deduplicating on `(book, fingerprint)` against what the vault
-     * already holds. Returns imported to duplicate counts for the report.
-     */
-    fun importBankTxns(book: String, rows: List<BankTxnEntity>): Pair<Int, Int> {
-        val trimmedBook = book.trim().ifEmpty { "Bank" }
-        var imported = 0
-        var duplicates = 0
-        mutate { b ->
-            val seen = b.bankTxns
-                .mapTo(HashSet()) { it.book.trim().lowercase() to it.fingerprint }
-            var next = (b.bankTxns.maxOfOrNull { it.id } ?: 0L) + 1
-            val fresh = ArrayList<BankTxnEntity>(rows.size)
-            val now = System.currentTimeMillis()
-            for (row in rows) {
-                val key = trimmedBook.lowercase() to row.fingerprint
-                if (!seen.add(key)) {
-                    duplicates++
-                    continue
-                }
-                fresh.add(row.copy(id = next++, book = trimmedBook, timestamp = now))
-                imported++
-            }
-            b.copy(bankTxns = b.bankTxns + fresh)
-        }
-        return imported to duplicates
-    }
-
-    /**
-     * Names already used as counter or verifier, most recent first.
-     *
-     * The same two or three people sign off every night, so the editor offers them
-     * rather than making someone retype a name 365 times a year.
-     */
-    fun knownCashPeople(): List<String> =
-        backup.cashBook
-            .sortedByDescending { it.timestamp }
-            .flatMap { listOf(it.countedBy, it.verifiedBy) }
-            .filter { it.isNotBlank() }
-            .distinct()
 
     // ── Favourites ────────────────────────────────────────────────────────────
     //
