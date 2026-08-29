@@ -4,7 +4,7 @@ package com.nikhil.sentinelx.desktop.core.format
  * Where the Cash Book and Bank Book live now. The one place the name appears —
  * rename it here once the standalone app is named.
  */
-const val HANDOFF_APP_NAME = "the new finance app"
+const val HANDOFF_APP_NAME = "Argus"
 
 /**
  * The two books moved out of SentinelX into a standalone app.
