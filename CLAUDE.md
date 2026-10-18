@@ -302,7 +302,7 @@ leave `upgradeUuid` alone), commit, then push a `v*` tag — the tag is what tri
 
     git tag v1.0.5 && git push origin v1.0.5
 
-`workflow_dispatch` runs a test build (artifacts only, no release). Current release: **v1.7.0** (Bills, OTP logins, RC cards, bridge locked-mode).
+`workflow_dispatch` runs a test build (artifacts only, no release). Current release: **v1.8.0** (Cash & Bank Books moved out to Argus).
 
 **A push is not a release.** Pushing `main` only moves the code; the CI is triggered by the
 **tag**, and nothing is built or published without one. If a "release" appears to have gone
