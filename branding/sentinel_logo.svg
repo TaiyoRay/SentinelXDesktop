@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SentinelX mark — winged shield with the electric keyhole.
+     Hand-drawn vector rebuild of the original AI raster, same identity:
+     tarnished-gold blade wings + shield (palette from ui/theme/Color.kt),
+     cyan keyhole glow. Master file: edit this, export every raster from it. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="goldBlade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFEBB0"/>
+      <stop offset="0.45" stop-color="#E8C070"/>
+      <stop offset="1" stop-color="#8A6830"/>
+    </linearGradient>
+    <linearGradient id="goldShield" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F0DFB0"/>
+      <stop offset="0.35" stop-color="#D4A853"/>
+      <stop offset="1" stop-color="#6A4F24"/>
+    </linearGradient>
+    <radialGradient id="shieldNight" cx="0.5" cy="0.38" r="0.85">
+      <stop offset="0" stop-color="#20222A"/>
+      <stop offset="0.55" stop-color="#101117"/>
+      <stop offset="1" stop-color="#060608"/>
+    </radialGradient>
+    <linearGradient id="cyanKey" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E6FCFF"/>
+      <stop offset="0.45" stop-color="#40F0FF"/>
+      <stop offset="1" stop-color="#00B8D4"/>
+    </linearGradient>
+    <radialGradient id="keyAura" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#00E5FF" stop-opacity="0.38"/>
+      <stop offset="0.55" stop-color="#00E5FF" stop-opacity="0.1"/>
+      <stop offset="1" stop-color="#00E5FF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+
+    <!-- Right wing: three nested crescent feathers + a talon crossing low.
+         Each shape carries a dark under-copy for metal thickness. -->
+    <g id="wingR">
+      <g fill="#584218" transform="translate(0 10)">
+        <path d="M548 560 C652 636 724 744 752 876 C666 802 598 724 564 636 Z"/>
+        <path d="M574 500 C692 492 796 452 872 316 C826 448 724 520 606 548 Z"/>
+        <path d="M566 420 C708 406 836 352 926 208 C868 352 748 440 600 480 Z"/>
+        <path d="M556 336 C716 318 860 240 958 104 C898 272 770 376 606 396 Z"/>
+      </g>
+      <g stroke="#2E2210" stroke-width="3" stroke-linejoin="round" fill="url(#goldBlade)">
+        <path d="M548 560 C652 636 724 744 752 876 C666 802 598 724 564 636 Z"/>
+        <path d="M574 500 C692 492 796 452 872 316 C826 448 724 520 606 548 Z"/>
+        <path d="M566 420 C708 406 836 352 926 208 C868 352 748 440 600 480 Z"/>
+        <path d="M556 336 C716 318 860 240 958 104 C898 272 770 376 606 396 Z"/>
+      </g>
+      <!-- edge-light along each feather's outer curve -->
+      <g fill="none" stroke="#FFF4CF" stroke-linecap="round">
+        <path d="M600 342 C748 324 876 252 944 128" stroke-width="7" opacity="0.6"/>
+        <path d="M612 424 C740 410 844 358 908 240" stroke-width="5" opacity="0.4"/>
+        <path d="M618 502 C724 494 812 456 860 342" stroke-width="4" opacity="0.3"/>
+        <path d="M576 594 C668 668 724 764 744 852" stroke-width="5" opacity="0.3"/>
+      </g>
+    </g>
+  </defs>
+
+  <!-- wings -->
+  <use href="#wingR"/>
+  <use href="#wingR" transform="translate(1024 0) scale(-1 1)"/>
+
+  <!-- shield: horned top corners, long bottom spike, metal thickness -->
+  <path d="M512 320 C472 300 424 304 372 268 C352 362 354 472 400 578 C436 664 480 726 512 818 C544 726 588 664 624 578 C670 472 672 362 652 268 C600 304 552 300 512 320 Z"
+        fill="#584218" transform="translate(0 10)"/>
+  <path d="M512 320 C472 300 424 304 372 268 C352 362 354 472 400 578 C436 664 480 726 512 818 C544 726 588 664 624 578 C670 472 672 362 652 268 C600 304 552 300 512 320 Z"
+        fill="url(#goldShield)" stroke="#2E2210" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M512 348 C478 332 438 334 404 310 C390 388 392 472 430 566 C460 638 490 684 512 744 C534 684 564 638 594 566 C632 472 634 388 620 310 C586 334 546 332 512 348 Z"
+        fill="url(#shieldNight)"/>
+  <!-- engraved pinstripe inside the dark field -->
+  <path d="M512 348 C478 332 438 334 404 310 C390 388 392 472 430 566 C460 638 490 684 512 744 C534 684 564 638 594 566 C632 472 634 388 620 310 C586 334 546 332 512 348 Z"
+        fill="none" stroke="#D4A853" stroke-width="3" opacity="0.45"
+        transform="translate(35.8 36.9) scale(0.93)"/>
+  <!-- crest gem at the top notch -->
+  <path d="M512 300 L534 330 L512 360 L490 330 Z" fill="url(#goldBlade)" stroke="#2E2210" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M512 310 L526 330 L512 350 L498 330 Z" fill="#0E0F14"/>
+  <path d="M512 316 L522 330 L512 344 L502 330 Z" fill="#40F0FF" opacity="0.9"/>
+
+  <!-- keyhole -->
+  <circle cx="512" cy="500" r="155" fill="url(#keyAura)"/>
+  <circle cx="512" cy="464" r="56" fill="none" stroke="#40F0FF" stroke-width="3" opacity="0.4"/>
+  <g fill="#00E5FF" filter="url(#glow)" opacity="0.75">
+    <circle cx="512" cy="464" r="44"/>
+    <path d="M498 496 C494 540 485 580 470 614 C496 631 528 631 554 614 C539 580 530 540 526 496 C517 490 507 490 498 496 Z"/>
+  </g>
+  <g fill="url(#cyanKey)">
+    <circle cx="512" cy="464" r="40"/>
+    <path d="M500 498 C496 540 487 578 474 610 C498 626 526 626 550 610 C537 578 528 540 524 498 C516 492 508 492 500 498 Z"/>
+  </g>
+  <path d="M486 448 A38 38 0 0 1 514 426" fill="none" stroke="#EFFFFF" stroke-width="6" stroke-linecap="round" opacity="0.55"/>
+</svg>
