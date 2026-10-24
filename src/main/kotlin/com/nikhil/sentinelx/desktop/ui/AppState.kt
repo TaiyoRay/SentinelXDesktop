@@ -27,6 +27,7 @@ import com.nikhil.sentinelx.desktop.core.format.newFolderSalt
 import com.nikhil.sentinelx.desktop.core.format.referencedImages
 import com.nikhil.sentinelx.desktop.core.format.scopedTo
 import com.nikhil.sentinelx.desktop.core.format.todayBusinessDate
+import com.nikhil.sentinelx.desktop.core.format.withUniqueIds
 import com.nikhil.sentinelx.desktop.core.store.LocalCrypto
 import com.nikhil.sentinelx.desktop.core.store.VaultStore
 import java.io.File
@@ -141,7 +142,7 @@ class AppState(private val store: VaultStore = VaultStore(VaultStore.defaultDir(
      * thread. Callers run this off the main thread and mirror progress via [busy].
      */
     fun unlock(password: CharArray): Boolean = guard("Unlocking vault…") {
-        session = store.unlock(password).also { backup = it.load() }
+        session = store.unlock(password).also { backup = loadRepaired(it) }
         loadFavourites()
         loadBridgePreference()
         locked = false
@@ -161,11 +162,24 @@ class AppState(private val store: VaultStore = VaultStore(VaultStore.defaultDir(
 
     fun create(password: CharArray, seed: MasterBackup = MasterBackup()): Boolean =
         guard("Creating vault…") {
-            session = store.create(password, seed).also { backup = it.load() }
+            session = store.create(password, seed).also { backup = loadRepaired(it) }
             loadFavourites()
             locked = false
             true
         } ?: false
+
+    /**
+     * Loads the vault and heals duplicate record ids left by imports made before
+     * [withUniqueIds] existed (they crash id-keyed lists and make by-id edits hit two
+     * rows). Saves only when something was actually fixed, so a healthy vault is not
+     * re-written — and the pre-repair state stays in history like any other save.
+     */
+    private fun loadRepaired(session: VaultStore.Session): MasterBackup {
+        val loaded = session.load()
+        val repaired = loaded.withUniqueIds()
+        if (repaired !== loaded) session.save(repaired)
+        return repaired
+    }
 
     fun lock() {
         bridge.onLocked()
@@ -208,11 +222,13 @@ class AppState(private val store: VaultStore = VaultStore(VaultStore.defaultDir(
         policy: VaultMerge.DuplicatePolicy = VaultMerge.DuplicatePolicy.SKIP
     ): Boolean = guard("Importing archive…") {
         val active = session ?: error("Vault is locked")
-        val result = VaultMerge.apply(backup, payload.backup, mode, policy)
-        val needed = result.vault.referencedImages()
+        // The archive's rows keep the ids the phone gave them, which collide with
+        // ours (both sides count from 1) — re-key them as Room's import would.
+        val merged = VaultMerge.apply(backup, payload.backup, mode, policy).vault.withUniqueIds()
+        val needed = merged.referencedImages()
         payload.images.forEach { (name, bytes) -> if (name in needed) active.putImage(name, bytes) }
-        active.save(result.vault)
-        backup = result.vault
+        active.save(merged)
+        backup = merged
         // An editor opened before the import holds a record the merge may have just
         // replaced, renamed or dropped. Saving it afterwards would quietly undo the
         // import for that one row.
@@ -535,7 +551,8 @@ class AppState(private val store: VaultStore = VaultStore(VaultStore.defaultDir(
      */
     fun restoreVersion(timestamp: Long): Boolean = guard("Restoring…") {
         val active = session ?: error("Vault is locked")
-        val previous = active.loadVersion(timestamp)
+        // A snapshot taken before the id repair can still hold duplicate ids.
+        val previous = active.loadVersion(timestamp).withUniqueIds()
         active.save(previous)
         backup = previous
         panels.closeAll()
